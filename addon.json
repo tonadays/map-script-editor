@@ -1,0 +1,12 @@
+{
+    "title": "map-script-editor",
+    "type": "tool",
+    "tags": [
+        "fun"
+    ],
+    "ignore": [
+        "*.psd",
+        "*.vcproj",
+        "*.svn*"
+    ]
+}
