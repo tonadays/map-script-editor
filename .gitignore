@@ -1,2 +1,3 @@
 *.gma
 *.lnk
+src/lua/weapons/gmod_tool/stools/refactortesttool.lua
