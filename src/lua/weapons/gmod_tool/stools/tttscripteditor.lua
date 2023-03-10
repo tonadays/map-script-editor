@@ -1,120 +1,232 @@
 TOOL.Category = "Trouble in Terrorist Town"
-TOOL.Name = "Map Script Editor"
+TOOL.Name = "#tool.tttscripteditor.name"
 TOOL.Command = nil
 TOOL.ConfigName = ""
-TOOL.ClientConVar["weapon"] = "weapon_zm_pistol"
-TOOL.ClientConVar["frozen"] = "0"
+TOOL.ClientConVar["selected_entity"] = ""
 TOOL.ClientConVar["replacespawns"] = "0"
 cleanup.Register("ttt_weapons")
 
 if CLIENT then
-    language.Add("tool.mapscripteditor.name", "Map Script Editor")
-    language.Add("tool.mapscripteditor.desc", "Spawn TTT weapon dummies and export their placement")
-    language.Add("tool.mapscripteditor.0", "Left click to spawn entity. Right click for matching ammo.")
+    language.Add("tool.tttscripteditor.name", "TTT Script Editor")
+    language.Add("tool.tttscripteditor.desc", "Spawn entity dummies and import/export their placement")
+    language.Add("tool.tttscripteditor.0", "Left click to spawn entity. Right click for matching entity, usually ammo.")
+    language.Add("tool.tttscripteditor.none", "No entity selected")
     language.Add("Cleanup_ttt_weapons", "TTT Dummy Weapons/ammo/spawns")
     language.Add("Undone_TTTWeapon", "Undone TTT item")
 end
 
-local weps = {
-    weapon_zm_pistol = {
-        name = "Pistol",
-        snd = "item_ammo_pistol_ttt"
-    },
+-- TTT entity kind enum globals
+WEAPON_NONE = 0
+WEAPON_MELEE = 1
+WEAPON_PISTOL = 2
+WEAPON_HEAVY = 3
+WEAPON_NADE = 4
+WEAPON_CARRY = 5
+WEAPON_EQUIP1 = 6
+WEAPON_EQUIP2 = 7
+WEAPON_ROLE = 8
+-- Entity kind enum globals specific to map script editor
+WEAPON_RANDOM = 9
+AMMO_RANDOM = 10
+AMMOSPAWN = 11
+PLAYERSPAWN = 12
+-- Strings corrosponding to each entity kind
+--[[
+local entity_kind_names = {
+    [WEAPON_NONE] = "None",
+    [WEAPON_MELEE] = "Crowbar",
+    [WEAPON_PISTOL] = "Secondary weapon",
+    [WEAPON_HEAVY] = "Primary weapon",
+    [WEAPON_NADE] = "Grenade",
+    [WEAPON_CARRY] = "Magneto-stick",
+    [WEAPON_EQUIP1] = "Primary equipment",
+    [WEAPON_EQUIP2] = "Secondary equipment",
+    [WEAPON_ROLE] = "Default equipment",
+    [WEAPON_RANDOM] = "Random weapon",
+    [AMMO_RANDOM] = "Random ammo",
+    [AMMOSPAWN] = "Ammo spawn",
+    [PLAYERSPAWN] = "Player spawn",
+}
+--]]
+-- Entity group enum globals
+ENTGROUP_SPECIAL = 0
+ENTGROUP_PRIMARY = 1
+ENTGROUP_SECONDARY = 2
+ENTGROUP_AMMO = 3
+ENTGROUP_NADE = 4
+ENTGROUP_EQUIPMENT = 5
+ENTGROUP_EDITOR = 6
+
+-- Grouping entities together using aformentioned entity groups
+local entity_group_names = {
+    [ENTGROUP_SPECIAL] = "Special",
+    [ENTGROUP_PRIMARY] = "Primary",
+    [ENTGROUP_SECONDARY] = "Secondary",
+    [ENTGROUP_AMMO] = "Ammo",
+    [ENTGROUP_NADE] = "Grenades",
+    [ENTGROUP_EQUIPMENT] = "Equipment",
+    [ENTGROUP_EDITOR] = "Editor",
+}
+
+-- Mapping entity kinds to entity groups
+local entity_group_index = {
+    [WEAPON_NONE] = ENTGROUP_SPECIAL,
+    [WEAPON_MELEE] = ENTGROUP_SPECIAL,
+    [WEAPON_PISTOL] = ENTGROUP_SECONDARY,
+    [WEAPON_HEAVY] = ENTGROUP_PRIMARY,
+    [WEAPON_NADE] = ENTGROUP_NADE,
+    [WEAPON_CARRY] = ENTGROUP_SPECIAL,
+    [WEAPON_EQUIP1] = ENTGROUP_EQUIPMENT,
+    [WEAPON_EQUIP2] = ENTGROUP_EQUIPMENT,
+    [WEAPON_ROLE] = ENTGROUP_EQUIPMENT,
+    [WEAPON_RANDOM] = ENTGROUP_EDITOR,
+    [AMMO_RANDOM] = ENTGROUP_EDITOR,
+    [AMMOSPAWN] = ENTGROUP_AMMO,
+    [PLAYERSPAWN] = ENTGROUP_EDITOR,
+}
+
+-- Entity info table
+local available_ents = {
+    -- Default primary weapons
     weapon_zm_shotgun = {
+        kind = WEAPON_HEAVY,
         name = "Shotgun",
+        mdl = "models/weapons/w_shot_xm1014.mdl",
         snd = "item_box_buckshot_ttt"
     },
     weapon_zm_mac10 = {
+        kind = WEAPON_HEAVY,
         name = "MAC10",
+        mdl = "models/weapons/w_smg_mac10.mdl",
         snd = "item_ammo_smg1_ttt"
     },
-    weapon_zm_revolver = {
-        name = "Deagle",
-        snd = "item_ammo_revolver_ttt"
-    },
     weapon_zm_rifle = {
+        kind = WEAPON_HEAVY,
         name = "Rifle",
+        mdl = "models/weapons/w_snip_scout.mdl",
         snd = "item_ammo_357_ttt"
     },
     weapon_zm_sledge = {
+        kind = WEAPON_HEAVY,
         name = "HUGE249",
-        snd = nil
-    },
-    weapon_zm_molotov = {
-        name = "Fire nade",
-        snd = nil
-    },
-    weapon_ttt_confgrenade = {
-        name = "Discombobulator",
-        snd = nil
-    },
-    weapon_ttt_smokegrenade = {
-        name = "Smoke nade",
+        mdl = "models/weapons/w_mach_m249para.mdl",
         snd = nil
     },
     weapon_ttt_m16 = {
+        kind = WEAPON_HEAVY,
         name = "M16",
+        mdl = "models/weapons/w_rif_m4a1.mdl",
         snd = "item_ammo_pistol_ttt"
+    },
+    -- Default secondary weapons
+    weapon_zm_pistol = {
+        kind = WEAPON_PISTOL,
+        name = "Pistol",
+        mdl = "models/weapons/w_pist_fiveseven.mdl",
+        snd = "item_ammo_pistol_ttt"
+    },
+    weapon_zm_revolver = {
+        kind = WEAPON_PISTOL,
+        name = "Deagle",
+        mdl = "models/weapons/w_pist_deagle.mdl",
+        snd = "item_ammo_revolver_ttt"
     },
     weapon_ttt_glock = {
+        kind = WEAPON_PISTOL,
         name = "Glock",
+        mdl = "models/weapons/w_pist_glock18.mdl",
         snd = "item_ammo_pistol_ttt"
     },
+    -- Ammunition
+    item_ammo_pistol_ttt = {
+        kind = AMMOSPAWN,
+        name = "Pistol/Rifle Ammo",
+        mdl = "models/items/boxsrounds.mdl",
+        snd = nil
+    },
+    item_ammo_smg1_ttt = {
+        kind = AMMOSPAWN,
+        name = "SMG ammo",
+        mdl = "models/items/boxmrounds.mdl",
+        snd = nil
+    },
+    item_ammo_revolver_ttt = {
+        kind = AMMOSPAWN,
+        name = "Revolver Ammo",
+        mdl = "models/items/357ammo.mdl",
+        color = Color(255, 100, 100),
+        snd = nil
+    },
+    item_ammo_357_ttt = {
+        kind = AMMOSPAWN,
+        name = "Sniper Rifle Ammo",
+        mdl = "models/items/357ammo.mdl",
+        snd = nil
+    },
+    item_box_buckshot_ttt = {
+        kind = AMMOSPAWN,
+        name = "Shotgun Ammo",
+        mdl = "models/items/boxbuckshot.mdl",
+        snd = nil
+    },
+    -- Grenades
+    weapon_zm_molotov = {
+        kind = WEAPON_NADE,
+        name = "Fire nade",
+        mdl = "models/weapons/w_eq_flashbang.mdl",
+        snd = nil
+    },
+    weapon_ttt_confgrenade = {
+        kind = WEAPON_NADE,
+        name = "Discombobulator",
+        mdl = "models/weapons/w_eq_fraggrenade.mdl",
+        snd = nil
+    },
+    weapon_ttt_smokegrenade = {
+        kind = WEAPON_NADE,
+        name = "Smoke nade",
+        mdl = "models/weapons/w_eq_smokegrenade.mdl",
+        snd = nil
+    },
+    -- Specific to map script editor
     ttt_random_weapon = {
+        kind = WEAPON_RANDOM,
         name = "Random weapon",
+        -- mdl = "models/weapons/w_shotgun.mdl",
+        mdl = "models/weapons/w_irifle.mdl",
+        color = Color(255, 255, 0),
         snd = "ttt_random_ammo"
     },
     ttt_random_ammo = {
+        kind = AMMO_RANDOM,
         name = "Random ammo",
+        mdl = "models/Items/battery.mdl",
+        color = Color(0, 255, 0),
         snd = nil
     },
     ttt_playerspawn = {
+        kind = PLAYERSPAWN,
         name = "Player spawn",
+        mdl = "models/player.mdl",
+        color = Color(0, 255, 0),
         snd = nil
     }
 }
 
-local mdls = {
-    weapon_zm_pistol = "models/weapons/w_pist_fiveseven.mdl",
-    weapon_zm_shotgun = "models/weapons/w_shot_xm1014.mdl",
-    weapon_zm_mac10 = "models/weapons/w_smg_mac10.mdl",
-    weapon_zm_revolver = "models/weapons/w_pist_deagle.mdl",
-    weapon_zm_rifle = "models/weapons/w_snip_scout.mdl",
-    weapon_zm_sledge = "models/weapons/w_mach_m249para.mdl",
-    weapon_zm_molotov = "models/weapons/w_eq_flashbang.mdl",
-    weapon_ttt_confgrenade = "models/weapons/w_eq_fraggrenade.mdl",
-    weapon_ttt_smokegrenade = "models/weapons/w_eq_smokegrenade.mdl",
-    weapon_ttt_m16 = "models/weapons/w_rif_m4a1.mdl",
-    weapon_ttt_glock = "models/weapons/w_pist_glock18.mdl",
-    ttt_random_weapon = "models/weapons/w_shotgun.mdl",
-    ttt_random_ammo = "models/Items/battery.mdl",
-    item_ammo_pistol_ttt = "models/items/boxsrounds.mdl",
-    item_ammo_smg1_ttt = "models/items/boxmrounds.mdl",
-    item_ammo_revolver_ttt = "models/items/357ammo.mdl",
-    item_ammo_357_ttt = "models/items/357ammo.mdl",
-    item_box_buckshot_ttt = "models/items/boxbuckshot.mdl",
-    ttt_playerspawn = "models/player.mdl"
-}
-
--- special colours for certain ents
-local colors = {
-    ttt_random_weapon = Color(255, 255, 0),
-    ttt_random_ammo = Color(0, 255, 0),
-    item_ammo_revolver_ttt = Color(255, 100, 100),
-    ttt_playerspawn = Color(0, 255, 0)
-}
-
 local function DummyInit(s)
-    if colors[s:GetClass()] then
-        local c = colors[s:GetClass()]
-        s:SetColor(c)
+    local cls = s:GetClass()
+
+    -- special colours for certain ents
+    if available_ents[cls].color then
+        s:SetColor(available_ents[cls].color)
     end
 
     s:SetCollisionGroup(COLLISION_GROUP_WEAPON)
     s:SetSolid(SOLID_VPHYSICS)
     s:SetMoveType(MOVETYPE_VPHYSICS)
 
-    if s:GetClass() == "ttt_playerspawn" then
+    -- special init for ttt_playerspawn
+    if cls == "ttt_playerspawn" then
         s:PhysicsInitBox(Vector(-18, -18, -0.1), Vector(18, 18, 66))
         s:SetPos(s:GetPos() + Vector(0, 0, 1))
     else
@@ -124,21 +236,24 @@ local function DummyInit(s)
     s:SetModel(s.Model)
 end
 
-for cls, mdl in pairs(mdls) do
-    local tbl = {
+-- class, entity info
+for cls, info in pairs(available_ents) do
+    local ent_tbl = {
         Type = "anim",
-        Model = Model(mdl),
+        Model = Model(info.mdl),
         Initialize = DummyInit
     }
 
-    scripted_ents.Register(tbl, cls, false)
+    scripted_ents.Register(ent_tbl, cls, false)
 end
 
 function TOOL:SpawnEntity(cls, trace)
-    local mdl = mdls[cls]
-    if not cls or not mdl then return end
+    if not cls then return end
+    -- entity info
+    local info = available_ents[cls]
+    if not info or not info.mdl then return end
     local ent = ents.Create(cls)
-    ent:SetModel(mdl)
+    ent:SetModel(info.mdl)
     ent:SetPos(trace.HitPos)
 
     local tr = util.TraceEntity({
@@ -161,18 +276,36 @@ function TOOL:SpawnEntity(cls, trace)
 end
 
 function TOOL:LeftClick(trace)
-    local cls = self:GetClientInfo("weapon")
+    local cls = self:GetClientInfo("selected_entity")
+
+    --[[
+        notification.AddLegacy("#tool.tttscripteditor.none", NOTIFY_HINT, 3)
+        surface.PlaySound("buttons/button15.wav")
+        Msg("Prop undone\n")
+    --]]
+    if cls == "" then
+        self:GetOwner():ChatPrint("#tool.tttscripteditor.none")
+
+        return
+    end
+
     self:SpawnEntity(cls, trace)
 end
 
 function TOOL:RightClick(trace)
-    local cls = self:GetClientInfo("weapon")
-    local info = weps[cls]
-    if not info then return end
-    local ammo = info.snd
+    local cls = self:GetClientInfo("selected_entity")
 
-    if not ammo then
-        self:GetOwner():ChatPrint("No matching ammo for this type!")
+    if cls == "" then
+        self:GetOwner():ChatPrint("#tool.tttscripteditor.none")
+
+        return
+    end
+
+    local info = available_ents[cls]
+    if not info then return end
+
+    if not info.snd then
+        self:GetOwner():ChatPrint("No matching entity for " .. cls)
 
         return
     end
@@ -180,30 +313,40 @@ function TOOL:RightClick(trace)
     self:SpawnEntity(info.snd, trace)
 end
 
--- note that this is not a method, REAL NICE
+-- note that for historic reasons, this is not a method
+-- is there a better way to set cvars here, particularly client cvars?
 function TOOL.BuildCPanel(panel)
-    panel:AddControl("Header", {
-        Text = "tool.mapscripteditor.name",
-        Description = language.GetPhrase("tool.mapscripteditor.desc")
-    })
+    -- description
+    panel:Help("#tool.tttscripteditor.desc")
+    -- entity list
+    local ent_list = vgui.Create("DListView", panel)
+    ent_list:Dock(FILL)
+    ent_list:SetMultiSelect(false)
+    ent_list:SetHeight(200)
+    ent_list:AddColumn("Name")
+    ent_list:AddColumn("Group")
+    local selected_entity = GetConVar("tttscripteditor_selected_entity"):GetString()
 
-    local opts = {}
+    for cls, info in pairs(available_ents) do
+        -- access the entity group by entity kind
+        local group = entity_group_index[info.kind]
+        local line = ent_list:AddLine(info.name, entity_group_names[group])
 
-    for w, info in pairs(weps) do
-        opts[info.name] = {
-            mapscripteditor_weapon = w
-        }
+        if selected_entity ~= "" and selected_entity == cls then
+            ent_list:SelectItem(line)
+        end
+
+        line.OnSelect = function()
+            RunConsoleCommand("tttscripteditor_selected_entity", cls)
+        end
     end
 
-    panel:AddControl("ListBox", {
-        Label = "Weapons",
-        Height = "200",
-        Options = opts
-    })
+    ent_list:SortByColumn(2, true)
+    panel:AddItem(ent_list)
 
     panel:AddControl("Button", {
         Label = "Report counts",
-        Command = "mapscripteditor_count",
+        Command = "tttscripteditor_count",
         Text = "Count"
     })
 
@@ -214,13 +357,13 @@ function TOOL.BuildCPanel(panel)
 
     panel:AddControl("CheckBox", {
         Label = "Replace existing player spawnpoints",
-        Command = "mapscripteditor_replacespawns",
+        Command = "tttscripteditor_replacespawns",
         Text = "Replace spawns"
     })
 
     panel:AddControl("Button", {
         Label = "Export to file",
-        Command = "mapscripteditor_queryexport",
+        Command = "tttscripteditor_queryexport",
         Text = "Export"
     })
 
@@ -231,19 +374,19 @@ function TOOL.BuildCPanel(panel)
 
     panel:AddControl("Button", {
         Label = "Import from file",
-        Command = "mapscripteditor_queryimport",
+        Command = "tttscripteditor_queryimport",
         Text = "Import"
     })
 
     panel:AddControl("Button", {
         Label = "Convert HL2 entities",
-        Command = "mapscripteditor_replacehl2",
+        Command = "tttscripteditor_replacehl2",
         Text = "Convert"
     })
 
     panel:AddControl("Button", {
         Label = "Remove all existing weapon/ammo",
-        Command = "mapscripteditor_removeall",
+        Command = "tttscripteditor_removeall",
         Text = "Remove all existing items"
     })
 end
@@ -257,10 +400,10 @@ if CLIENT then
 
         if file.Exists(fname, "DATA") then
             Derma_StringRequest("File exists", "The file \"" .. fname .. "\" already exists. Save under a different filename? Leave unchanged to overwrite.", fname, function(txt)
-                RunConsoleCommand("mapscripteditor_export", txt)
+                RunConsoleCommand("tttscripteditor_export", txt)
             end)
         else
-            RunConsoleCommand("mapscripteditor_export")
+            RunConsoleCommand("tttscripteditor_export")
         end
     end
 
@@ -270,66 +413,56 @@ if CLIENT then
         local fname = "ttt/maps/" .. map .. "_ttt.txt"
 
         Derma_StringRequest("Import", "What file do you want to import? Note that files meant for other maps will result in crazy things happening.", fname, function(txt)
-            RunConsoleCommand("mapscripteditor_import", txt)
+            RunConsoleCommand("tttscripteditor_import", txt)
         end)
     end
 else
     -- again, hilarious things happen when this shit is used in mp
-    concommand.Add("mapscripteditor_queryexport", function()
+    concommand.Add("tttscripteditor_queryexport", function()
         BroadcastLua("QueryFileExists()")
     end)
 
-    concommand.Add("mapscripteditor_queryimport", function()
+    concommand.Add("tttscripteditor_queryimport", function()
         BroadcastLua("QueryImportName()")
     end)
 end
 
-WEAPON_PISTOL = 1
-WEAPON_HEAVY = 2
-WEAPON_NADE = 3
-WEAPON_RANDOM = 4
-PLAYERSPAWN = 5
-
-local enttypes = {
-    weapon_zm_pistol = WEAPON_PISTOL,
-    weapon_zm_revolver = WEAPON_PISTOL,
-    weapon_ttt_glock = WEAPON_PISTOL,
-    weapon_zm_mac10 = WEAPON_HEAVY,
-    weapon_zm_shotgun = WEAPON_HEAVY,
-    weapon_zm_rifle = WEAPON_HEAVY,
-    weapon_zm_sledge = WEAPON_HEAVY,
-    weapon_ttt_m16 = WEAPON_HEAVY,
-    weapon_zm_molotov = WEAPON_NADE,
-    weapon_ttt_smokegrenade = WEAPON_NADE,
-    weapon_ttt_confgrenade = WEAPON_NADE,
-    ttt_random_weapon = WEAPON_RANDOM,
-    ttt_playerspawn = PLAYERSPAWN
-}
-
 local function PrintCount(ply)
+    -- could be a simple pairs loop to make this
     local count = {
+        [WEAPON_NONE] = 0,
+        [WEAPON_MELEE] = 0,
         [WEAPON_PISTOL] = 0,
         [WEAPON_HEAVY] = 0,
         [WEAPON_NADE] = 0,
+        [WEAPON_CARRY] = 0,
+        [WEAPON_EQUIP1] = 0,
+        [WEAPON_EQUIP2] = 0,
+        [WEAPON_ROLE] = 0,
         [WEAPON_RANDOM] = 0,
+        [AMMO_RANDOM] = 0,
+        [AMMOSPAWN] = 0,
         [PLAYERSPAWN] = 0
     }
 
-    for cls, t in pairs(enttypes) do
+    for cls, info in pairs(available_ents) do
         for _, ent in pairs(ents.FindByClass(cls)) do
-            count[t] = count[t] + 1
+            count[info.kind] = count[info.kind] + 1
         end
     end
 
-    ply:ChatPrint("Entity count (use report_entities in console for more detail):")
+    ply:ChatPrint("Entity count (use report_entities in console for more detail)")
     ply:ChatPrint("Primary weapons: " .. count[WEAPON_HEAVY])
     ply:ChatPrint("Secondary weapons: " .. count[WEAPON_PISTOL])
     ply:ChatPrint("Grenades: " .. count[WEAPON_NADE])
+    ply:ChatPrint("Special equipment: " .. count[WEAPON_EQUIP1])
+    ply:ChatPrint("Special equipment2: " .. count[WEAPON_EQUIP2])
+    ply:ChatPrint("Special role equipment: " .. count[WEAPON_ROLE])
     ply:ChatPrint("Random weapons: " .. count[WEAPON_RANDOM])
     ply:ChatPrint("Player spawns: " .. count[PLAYERSPAWN])
 end
 
-concommand.Add("mapscripteditor_count", PrintCount)
+concommand.Add("tttscripteditor_count", PrintCount)
 
 -- This shit will break terribly in MP
 if SERVER or CLIENT then
@@ -339,24 +472,21 @@ if SERVER or CLIENT then
         if not IsValid(ply) then return end
         local map = string.lower(game.GetMap())
         if not map then return end
-        --local frozen_only = GetConVar("mapscripteditor_frozen"):GetBool()
-        local frozen_only = false
         -- Nice header, # is comment
         local buf = "# Trouble in Terrorist Town weapon/ammo placement overrides\n"
         buf = buf .. "# For map: " .. map .. "\n"
         buf = buf .. "# Exported by: " .. ply:Nick() .. "\n"
         -- Write settings ("setting: <name> <value>")
-        local rspwns = GetConVar("mapscripteditor_replacespawns"):GetBool() and "1" or "0"
+        local rspwns = GetConVar("tttscripteditor_replacespawns"):GetBool() and "1" or "0"
         buf = buf .. "setting:\treplacespawns " .. rspwns .. "\n"
         local num = 0
 
-        for cls, mdl in pairs(mdls) do
+        for cls, info in pairs(available_ents) do
             for _, ent in pairs(ents.FindByClass(cls)) do
-                if IsValid(ent) then
-                    if not frozen_only or not ent:GetPhysicsObject():IsMoveable() then
-                        num = num + 1
-                        buf = buf .. Format("%s\t%s\t%s\n", cls, tostring(ent:GetPos()), tostring(ent:GetAngles()))
-                    end
+                -- There was unfinished code & an unused cvar here presumably for toggling IsMoveable/frozen only part of this
+                if IsValid(ent) and not ent:GetPhysicsObject():IsMoveable() then
+                    num = num + 1
+                    buf = buf .. Format("%s\t%s\t%s\n", cls, tostring(ent:GetPos()), tostring(ent:GetAngles()))
                 end
             end
         end
@@ -377,14 +507,12 @@ if SERVER or CLIENT then
         ply:ChatPrint(num .. " placements saved to /garrysmod/data/" .. fname)
     end
 
-    concommand.Add("mapscripteditor_export", Export)
+    concommand.Add("tttscripteditor_export", Export)
 
     local function SpawnDummyEnt(cls, pos, ang)
-        if not cls or not pos or not ang then return false end
-        local mdl = mdls[cls]
-        if not mdl then return end
+        if not cls or not pos or not ang or not available_ents[cls] or available_ents[cls].mdl then return false end
         local ent = ents.Create(cls)
-        ent:SetModel(mdl)
+        ent:SetModel(available_ents[cls].mdl)
         ent:SetPos(pos)
         ent:SetAngles(ang)
         ent:SetCollisionGroup(COLLISION_GROUP_WEAPON)
@@ -427,7 +555,7 @@ if SERVER or CLIENT then
                 if #data > 0 then
                     if data[1] == "setting:" and tostring(data[2]) then
                         local raw = string.Explode(" ", data[2])
-                        RunConsoleCommand("mapscripteditor_" .. raw[1], tonumber(raw[2]))
+                        RunConsoleCommand("tttscripteditor_" .. raw[1], tonumber(raw[2]))
                         fail = false
                         num = num - 1
                     elseif #data == 3 then
@@ -453,7 +581,7 @@ if SERVER or CLIENT then
         ply:ChatPrint("Spawned " .. num .. " dummy ents")
     end
 
-    concommand.Add("mapscripteditor_import", Import)
+    concommand.Add("tttscripteditor_import", Import)
 
     local function RemoveAll(ply, cmd, args)
         if not IsValid(ply) then return end
@@ -489,7 +617,7 @@ if SERVER or CLIENT then
         ply:ChatPrint("Removed " .. num .. " weapon/ammo ents")
     end
 
-    concommand.Add("mapscripteditor_removeall", RemoveAll)
+    concommand.Add("tttscripteditor_removeall", RemoveAll)
 
     local hl2_replace = {
         ["item_ammo_pistol"] = "item_ammo_pistol_ttt",
@@ -522,12 +650,13 @@ if SERVER or CLIENT then
         ["weapon_crowbar"] = "weapon_zm_molotov"
     }
 
-    local function ReplaceSingle(ent, newname)
+    local function ReplaceSingle(ent, new_cls_name)
+        -- vector_origin is actually a global documented here: https://wiki.facepunch.com/gmod/Global_Variables
         if ent:GetPos() == vector_origin then return false end
         if ent:IsWeapon() and IsValid(ent:GetOwner()) and ent:GetOwner():IsPlayer() then return false end
         ent:SetSolid(SOLID_NONE)
-        local rent = ents.Create(newname)
-        rent:SetModel(mdls[newname])
+        local rent = ents.Create(new_cls_name)
+        rent:SetModel(available_ents[new_cls_name].mdl)
         rent:SetPos(ent:GetPos())
         rent:SetAngles(ent:GetAngles())
         rent:Spawn()
@@ -557,5 +686,5 @@ if SERVER or CLIENT then
         ply:ChatPrint("Replaced " .. c .. " HL2 entities with TTT versions.")
     end
 
-    concommand.Add("mapscripteditor_replacehl2", ReplaceHL2Ents)
+    concommand.Add("tttscripteditor_replacehl2", ReplaceHL2Ents)
 end
