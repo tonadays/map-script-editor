@@ -30,7 +30,13 @@
         "Angle",
         "vector_origin",
         "SOLID_NONE",
-        "TOP"
+        "TOP",
+        "Tool",
+        "Player",
+        "notification",
+        "surface",
+        "Msg",
+        "NOTIFY_HINT"
     ],
     "glualint.run": "onSave",
     "Lua.diagnostics.disable": [
