@@ -49,23 +49,23 @@ local entity_kind_names = {
 }
 --]]
 -- Entity group enum globals
-ENTGROUP_SPECIAL = 0
+ENTGROUP_EDITOR = 0
 ENTGROUP_PRIMARY = 1
 ENTGROUP_SECONDARY = 2
 ENTGROUP_AMMO = 3
 ENTGROUP_NADE = 4
 ENTGROUP_EQUIPMENT = 5
-ENTGROUP_EDITOR = 6
+ENTGROUP_SPECIAL = 6
 
 -- Grouping entities together using aformentioned entity groups
 local entity_group_names = {
-    [ENTGROUP_SPECIAL] = "Special",
+    [ENTGROUP_EDITOR] = "Editor",
     [ENTGROUP_PRIMARY] = "Primary",
     [ENTGROUP_SECONDARY] = "Secondary",
     [ENTGROUP_AMMO] = "Ammo",
     [ENTGROUP_NADE] = "Grenades",
     [ENTGROUP_EQUIPMENT] = "Equipment",
-    [ENTGROUP_EDITOR] = "Editor",
+    [ENTGROUP_SPECIAL] = "Special",
 }
 
 -- Mapping entity kinds to entity groups
@@ -85,7 +85,7 @@ local entity_group_index = {
     [PLAYERSPAWN] = ENTGROUP_EDITOR,
 }
 
--- Entity info table
+-- Entity info table, will be filtered of ents unavailable in the current game
 local available_ents = {
     -- Default primary weapons
     weapon_zm_shotgun = {
@@ -213,6 +213,30 @@ local available_ents = {
     }
 }
 
+-- Ents unavailable in the current game
+local unavailable_ents = {}
+
+-- General utility for getting table size
+local function GetTableSize(t)
+    local count = 0
+
+    for _, __ in pairs(t) do
+        count = count + 1
+    end
+
+    return count
+end
+
+-- Checks that the model path is valid and, if supplied, that the entity's lua file exists in the given path
+local function IsValidEditorEnt(info)
+    if not info then return false end
+    if not info.mdl or not util.IsValidModel(info.mdl) then return false end
+    -- This check is only performed for custom weapons and entities which have a string in the lua key
+    if info.lua and not file.Exists(info.lua, "GAME") then return false end
+
+    return true
+end
+
 local function DummyInit(s)
     local cls = s:GetClass()
 
@@ -236,22 +260,35 @@ local function DummyInit(s)
     s:SetModel(s.Model)
 end
 
--- class, entity info
+-- filters available_ents and inits usable entiites
 for cls, info in pairs(available_ents) do
-    local ent_tbl = {
-        Type = "anim",
-        Model = Model(info.mdl),
-        Initialize = DummyInit
-    }
+    if IsValidEditorEnt(info) then
+        local ent_tbl = {
+            Type = "anim",
+            Model = Model(info.mdl),
+            Initialize = DummyInit
+        }
 
-    scripted_ents.Register(ent_tbl, cls, false)
+        scripted_ents.Register(ent_tbl, cls, false)
+    else
+        unavailable_ents[cls] = info
+        available_ents[cls] = nil
+    end
 end
+
+print("[ttt script editor] filtered " .. GetTableSize(unavailable_ents) .. " unavailable ents")
 
 function TOOL:SpawnEntity(cls, trace)
     if not cls then return end
     -- entity info
     local info = available_ents[cls]
-    if not info or not info.mdl then return end
+
+    if not info or not info.mdl then
+        error("attempted to spawn ent " .. cls .. "with missing or incomplete info")
+
+        return
+    end
+
     local ent = ents.Create(cls)
     ent:SetModel(info.mdl)
     ent:SetPos(trace.HitPos)
@@ -289,6 +326,12 @@ function TOOL:LeftClick(trace)
         return
     end
 
+    if not available_ents[cls] then
+        self:GetOwner():ChatPrint("No " .. cls .. " entity available")
+
+        return
+    end
+
     self:SpawnEntity(cls, trace)
 end
 
@@ -302,7 +345,12 @@ function TOOL:RightClick(trace)
     end
 
     local info = available_ents[cls]
-    if not info then return end
+
+    if not info then
+        self:GetOwner():ChatPrint("No " .. cls .. " entity available")
+
+        return
+    end
 
     if not info.snd then
         self:GetOwner():ChatPrint("No matching entity for " .. cls)
@@ -314,7 +362,6 @@ function TOOL:RightClick(trace)
 end
 
 -- note that for historic reasons, this is not a method
--- is there a better way to set cvars here, particularly client cvars?
 function TOOL.BuildCPanel(panel)
     -- description
     panel:Help("#tool.tttscripteditor.desc")
@@ -325,23 +372,26 @@ function TOOL.BuildCPanel(panel)
     ent_list:SetHeight(200)
     ent_list:AddColumn("Name")
     ent_list:AddColumn("Group")
+    -- is there any better way to get cvars here, particularly client cvars?
     local selected_entity = GetConVar("tttscripteditor_selected_entity"):GetString()
 
     for cls, info in pairs(available_ents) do
         -- access the entity group by entity kind
         local group = entity_group_index[info.kind]
         local line = ent_list:AddLine(info.name, entity_group_names[group])
+        line:SetSortValue(2, group)
 
         if selected_entity ~= "" and selected_entity == cls then
             ent_list:SelectItem(line)
         end
 
         line.OnSelect = function()
+            -- is there any better way to set cvars here, particularly client cvars?
             RunConsoleCommand("tttscripteditor_selected_entity", cls)
         end
     end
 
-    ent_list:SortByColumn(2, true)
+    ent_list:SortByColumn(2, false)
     panel:AddItem(ent_list)
 
     panel:AddControl("Button", {
@@ -429,7 +479,7 @@ end
 
 local function PrintCount(ply)
     -- could be a simple pairs loop to make this
-    local count = {
+    local counts = {
         [WEAPON_NONE] = 0,
         [WEAPON_MELEE] = 0,
         [WEAPON_PISTOL] = 0,
@@ -447,19 +497,17 @@ local function PrintCount(ply)
 
     for cls, info in pairs(available_ents) do
         for _, ent in pairs(ents.FindByClass(cls)) do
-            count[info.kind] = count[info.kind] + 1
+            counts[info.kind] = counts[info.kind] + 1
         end
     end
 
     ply:ChatPrint("Entity count (use report_entities in console for more detail)")
-    ply:ChatPrint("Primary weapons: " .. count[WEAPON_HEAVY])
-    ply:ChatPrint("Secondary weapons: " .. count[WEAPON_PISTOL])
-    ply:ChatPrint("Grenades: " .. count[WEAPON_NADE])
-    ply:ChatPrint("Special equipment: " .. count[WEAPON_EQUIP1])
-    ply:ChatPrint("Special equipment2: " .. count[WEAPON_EQUIP2])
-    ply:ChatPrint("Special role equipment: " .. count[WEAPON_ROLE])
-    ply:ChatPrint("Random weapons: " .. count[WEAPON_RANDOM])
-    ply:ChatPrint("Player spawns: " .. count[PLAYERSPAWN])
+    ply:ChatPrint(counts[WEAPON_HEAVY] .. " primary weapons")
+    ply:ChatPrint(counts[WEAPON_PISTOL] .. " secondary weapons")
+    ply:ChatPrint(counts[WEAPON_NADE] .. " grenades")
+    -- ply:ChatPrint(counts[WEAPON_EQUIP1] + counts[WEAPON_EQUIP2] + counts[WEAPON_ROLE] .. "equipment")
+    ply:ChatPrint(counts[WEAPON_RANDOM] .. " random weapons")
+    ply:ChatPrint(counts[PLAYERSPAWN] .. " player spawns")
 end
 
 concommand.Add("tttscripteditor_count", PrintCount)
