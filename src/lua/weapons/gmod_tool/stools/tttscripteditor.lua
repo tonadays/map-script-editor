@@ -510,7 +510,7 @@ if SERVER or CLIENT then
     concommand.Add("tttscripteditor_export", Export)
 
     local function SpawnDummyEnt(cls, pos, ang)
-        if not cls or not pos or not ang or not available_ents[cls] or available_ents[cls].mdl then return false end
+        if not cls or not pos or not ang or not available_ents[cls] or not available_ents[cls].mdl then return false end
         local ent = ents.Create(cls)
         ent:SetModel(available_ents[cls].mdl)
         ent:SetPos(pos)
