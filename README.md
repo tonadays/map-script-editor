@@ -3,23 +3,28 @@
 Tona Days' fork of the [TTT Weapon Placer](https://steamcommunity.com/sharedfiles/filedetails/?id=119928922) by [Bad King Urgrain](https://steamcommunity.com/profiles/76561197964193008)
 
 Improvements:
+
 - Updated vgui code
 - Sorted entity list with groups
 - Ability to select ammo ents directly
+- Partial support for `auto_ammo` (used for all ttt_random_weapon spawns)
 
 ## Todo
 
-- Support for `auto_ammo` when placing random weapons
+Pull requests accepted.
+
+- Support for `auto_ammo` when placing individual random weapons
 - Support for traitor/detective equipment
 - Support for miscellaneous ttt entities
 - Support for our custom weapons
   - Entities will not be listed unless they are present in your game
+- Fix for physgun beam positions not updating
 - Fix "Remove all existing weapons" removing sandbox weapons from players
-- Fix physgun entity origin not updating (?)
 - Dynamic ttt weapon support
 - Support for [Exho](https://steamcommunity.com/id/Exho1)'s [Prop Placing Tool](https://steamcommunity.com/sharedfiles/filedetails/?id=326667871) scripts ([source code](https://github.com/Exho1/PH_PropPlacerTool))
 - Support for all of [zaratusa](https://steamcommunity.com/id/zaratusa)'s custom weapons
-- Proper handling of client/server/prediction and consquently multiplayer sandbox support
+- Proper handling of client/server/prediction logic and consquently multiplayer sandbox support
+  - Likely related to physgun beam position issue
 
 ## Developer Reference
 

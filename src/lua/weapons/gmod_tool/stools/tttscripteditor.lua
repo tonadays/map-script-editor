@@ -4,6 +4,8 @@ TOOL.Command = nil
 TOOL.ConfigName = ""
 TOOL.ClientConVar["selected_entity"] = ""
 TOOL.ClientConVar["replacespawns"] = "0"
+TOOL.ClientConVar["auto_ammo"] = "0"
+TOOL.ClientConVar["auto_ammo_max"] = "6"
 cleanup.Register("ttt_weapons")
 
 if CLIENT then
@@ -216,7 +218,7 @@ local available_ents = {
 -- Ents unavailable in the current game
 local unavailable_ents = {}
 
--- General utility for getting table size
+-- General utility for getting table size where # won't work
 local function GetTableSize(t)
     local count = 0
 
@@ -361,10 +363,21 @@ function TOOL:RightClick(trace)
     self:SpawnEntity(info.snd, trace)
 end
 
--- note that for historic reasons, this is not a method
+-- convenience function for BuildCPanel
+local function AddSimpleDLabel(CPanel, text)
+    -- local DPanel = vgui.Create( "DPanel", CPanel)
+    -- DPanel:SetBackgroundColor(Color(0, 0, 0, 0))
+    -- DPanel:SetContentAlignment(5) -- center
+    local DLabel = vgui.Create("DLabel", CPanel)
+    DLabel:SetText(text)
+    DLabel:SetTextColor(Color(0, 0, 0))
+    CPanel:AddItem(DLabel)
+end
+
+-- note that for historic reasons, this is not a method.
+-- is there any better way to set or get cvars inside here, particularly client cvars?
 function TOOL.BuildCPanel(panel)
-    -- description
-    panel:Help("#tool.tttscripteditor.desc")
+    AddSimpleDLabel(panel, "#tool.tttscripteditor.desc")
     -- entity list
     local ent_list = vgui.Create("DListView", panel)
     ent_list:Dock(FILL)
@@ -372,8 +385,7 @@ function TOOL.BuildCPanel(panel)
     ent_list:SetHeight(200)
     ent_list:AddColumn("Name")
     ent_list:AddColumn("Group")
-    -- is there any better way to get cvars here, particularly client cvars?
-    local selected_entity = GetConVar("tttscripteditor_selected_entity"):GetString()
+    local current_selected_entity = GetConVar("tttscripteditor_selected_entity"):GetString()
 
     for cls, info in pairs(available_ents) do
         -- access the entity group by entity kind
@@ -381,12 +393,11 @@ function TOOL.BuildCPanel(panel)
         local line = ent_list:AddLine(info.name, entity_group_names[group])
         line:SetSortValue(2, group)
 
-        if selected_entity ~= "" and selected_entity == cls then
+        if current_selected_entity ~= "" and current_selected_entity == cls then
             ent_list:SelectItem(line)
         end
 
         line.OnSelect = function()
-            -- is there any better way to set cvars here, particularly client cvars?
             RunConsoleCommand("tttscripteditor_selected_entity", cls)
         end
     end
@@ -400,10 +411,48 @@ function TOOL.BuildCPanel(panel)
         Text = "Count"
     })
 
-    panel:AddControl("Label", {
-        Text = "Export",
-        Description = "Export weapon placements"
-    })
+    -- auto_ammo number input
+    local current_auto_ammo_value = GetConVar("tttscripteditor_auto_ammo"):GetInt()
+    AddSimpleDLabel(panel, "Amount of matching ammo for all random weapons")
+    local auto_ammo_max = GetConVar("tttscripteditor_auto_ammo_max"):GetInt()
+    local auto_ammo_slider = vgui.Create("DNumSlider", panel)
+    auto_ammo_slider:SetMin(0)
+    auto_ammo_slider:SetMax(auto_ammo_max)
+    auto_ammo_slider:SetDecimals(0)
+    auto_ammo_slider:SetDark(true)
+    auto_ammo_slider.Label:SetVisible(false)
+    local auto_ammo_label = vgui.Create("DLabel", auto_ammo_slider)
+    auto_ammo_label:SetText("auto_ammo")
+    auto_ammo_label:SetTextColor(Color(0, 0, 0))
+    auto_ammo_label:Dock(LEFT)
+
+    auto_ammo_slider.OnValueChanged = function(self)
+        -- rounding is required here because SetDecimals() doesn't affect values passed to OnValueChanged
+        local value = math.Round(self:GetValue(), 0)
+        local new_value = value
+
+        if value > auto_ammo_max then
+            new_value = auto_ammo_max
+            self:SetValue(new_value)
+        end
+
+        RunConsoleCommand("tttscripteditor_auto_ammo", new_value)
+    end
+
+    if current_auto_ammo_value and current_auto_ammo_value ~= "" then
+        local new_value = current_auto_ammo_value
+
+        if current_auto_ammo_value > auto_ammo_max then
+            new_value = auto_ammo_max
+            RunConsoleCommand("tttscripteditor_auto_ammo", new_value)
+        end
+
+        auto_ammo_slider:SetValue(new_value)
+    end
+
+    panel:AddItem(auto_ammo_slider)
+    -- Exporting
+    AddSimpleDLabel(panel, "Export entity placements")
 
     panel:AddControl("CheckBox", {
         Label = "Replace existing player spawnpoints",
@@ -417,10 +466,8 @@ function TOOL.BuildCPanel(panel)
         Text = "Export"
     })
 
-    panel:AddControl("Label", {
-        Text = "Import",
-        Description = "Import weapon placements"
-    })
+    -- Importing
+    AddSimpleDLabel(panel, "Import entity placements")
 
     panel:AddControl("Button", {
         Label = "Import from file",
@@ -528,13 +575,23 @@ if SERVER or CLIENT then
         local rspwns = GetConVar("tttscripteditor_replacespawns"):GetBool() and "1" or "0"
         buf = buf .. "setting:\treplacespawns " .. rspwns .. "\n"
         local num = 0
+        local current_auto_ammo_value = GetConVar("tttscripteditor_auto_ammo"):GetInt()
 
+        -- there was an unused cvar here for toggling an IsMoveable check as part of this, i've removed that code as it never influenced anything
         for cls, info in pairs(available_ents) do
-            for _, ent in pairs(ents.FindByClass(cls)) do
-                -- There was unfinished code & an unused cvar here presumably for toggling IsMoveable/frozen only part of this
-                if IsValid(ent) and not ent:GetPhysicsObject():IsMoveable() then
-                    num = num + 1
-                    buf = buf .. Format("%s\t%s\t%s\n", cls, tostring(ent:GetPos()), tostring(ent:GetAngles()))
+            if cls == "ttt_random_weapon" and current_auto_ammo_value ~= 0 then
+                for _, ent in pairs(ents.FindByClass(cls)) do
+                    if IsValid(ent) then
+                        num = num + 1
+                        buf = buf .. Format("%s\t%s\t%s\tauto_ammo %s\n", cls, tostring(ent:GetPos()), tostring(ent:GetAngles()), tostring(current_auto_ammo_value))
+                    end
+                end
+            else
+                for _, ent in pairs(ents.FindByClass(cls)) do
+                    if IsValid(ent) then
+                        num = num + 1
+                        buf = buf .. Format("%s\t%s\t%s\n", cls, tostring(ent:GetPos()), tostring(ent:GetAngles()))
+                    end
                 end
             end
         end

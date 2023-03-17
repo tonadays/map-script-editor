@@ -36,11 +36,17 @@
         "notification",
         "surface",
         "Msg",
-        "NOTIFY_HINT"
+        "NOTIFY_HINT",
+        "LEFT",
+        "cam",
+        "draw",
+        "TEXT_ALIGN_CENTER",
+        "SysTime"
     ],
     "glualint.run": "onSave",
     "Lua.diagnostics.disable": [
         "undefined-field",
-        "duplicate-set-field"
+        "duplicate-set-field",
+        "unused-local"
     ],
 }
