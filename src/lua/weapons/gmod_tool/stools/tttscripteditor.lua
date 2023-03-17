@@ -615,9 +615,11 @@ if SERVER or CLIENT then
     concommand.Add("tttscripteditor_export", Export)
 
     local function SpawnDummyEnt(cls, pos, ang)
-        if not cls or not pos or not ang or not available_ents[cls] or not available_ents[cls].mdl then return false end
+        if not cls or not pos or not ang then return true end
+        local info = available_ents[cls]
+        if not info or not info.mdl then return true end
         local ent = ents.Create(cls)
-        ent:SetModel(available_ents[cls].mdl)
+        ent:SetModel(info.mdl)
         ent:SetPos(pos)
         ent:SetAngles(ang)
         ent:SetCollisionGroup(COLLISION_GROUP_WEAPON)
@@ -651,6 +653,7 @@ if SERVER or CLIENT then
         local buf = file.Read(fname, "DATA")
         local lines = string.Explode("\n", buf)
         local num = 0
+        local warn_auto_ammo = false
 
         for k, line in ipairs(lines) do
             if not string.match(line, "^#") and line ~= "" then
@@ -663,7 +666,11 @@ if SERVER or CLIENT then
                         RunConsoleCommand("tttscripteditor_" .. raw[1], tonumber(raw[2]))
                         fail = false
                         num = num - 1
-                    elseif #data == 3 then
+                    elseif #data == 3 or #data == 4 then
+                        if #data == 4 and not warn_auto_ammo then
+                            warn_auto_ammo = true
+                        end
+
                         local cls = data[1]
                         local ang = nil
                         local pos = nil
@@ -684,6 +691,10 @@ if SERVER or CLIENT then
         end
 
         ply:ChatPrint("Spawned " .. num .. " dummy ents")
+
+        if warn_auto_ammo then
+            ply:ChatPrint("Script contained auto_ammo settings which have been discarded")
+        end
     end
 
     concommand.Add("tttscripteditor_import", Import)

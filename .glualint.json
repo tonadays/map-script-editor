@@ -11,5 +11,6 @@
     "lint_duplicateTableKeys": true,
     "lint_profanity": true,
     "lint_unusedVars": true,
-    "lint_inconsistentVariableStyle": false
+    "lint_inconsistentVariableStyle": false,
+    "lint_maxScopeDepth": 8
 }
