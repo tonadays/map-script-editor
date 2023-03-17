@@ -4,6 +4,7 @@ Tona Days' fork of the [TTT Weapon Placer](https://steamcommunity.com/sharedfile
 
 Improvements:
 
+- Entities will not be listed unless they are present in your game
 - Updated vgui code
 - Sorted entity list with groups
 - Ability to select ammo ents directly
@@ -17,7 +18,6 @@ Pull requests accepted.
 - Support for traitor/detective equipment
 - Support for miscellaneous ttt entities
 - Support for our custom weapons
-  - Entities will not be listed unless they are present in your game
 - Fix for physgun beam positions not updating
 - Fix "Remove all existing weapons" removing sandbox weapons from players
 - Dynamic ttt weapon support
